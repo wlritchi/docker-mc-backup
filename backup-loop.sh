@@ -24,6 +24,8 @@ fi
 : "${RCON_PASSWORD:=minecraft}"
 : "${RCON_RETRIES:=5}"
 : "${RCON_RETRY_INTERVAL:=10s}"
+: "${RCON_COMMANDS_BEFORE_BACKUP:=}"
+: "${RCON_COMMANDS_AFTER_BACKUP:=}"
 : "${EXCLUDES:=*.jar,cache,logs}" # Comma separated list of glob(3) patterns
 : "${LINK_LATEST:=false}"
 : "${RESTIC_ADDITIONAL_TAGS:=mc_backups}" # Space separated list of restic tags
@@ -407,11 +409,19 @@ while true; do
     retry ${RCON_RETRIES} ${RCON_RETRY_INTERVAL} rcon-cli save-all flush
     retry ${RCON_RETRIES} ${RCON_RETRY_INTERVAL} sync
 
+    while IFS=$'\n' read -r command; do
+      [ -n "${command}" ] && retry ${RCON_RETRIES} ${RCON_RETRY_INTERVAL} rcon-cli "${command}"
+    done <<< "${RCON_COMMANDS_BEFORE_BACKUP}"
+
     "${BACKUP_METHOD}" backup
 
     retry ${RCON_RETRIES} ${RCON_RETRY_INTERVAL} rcon-cli save-on
     # Remove our exit trap now
     trap EXIT
+
+    while IFS=$'\n' read -r command; do
+      [ -n "${command}" ] && retry ${RCON_RETRIES} ${RCON_RETRY_INTERVAL} rcon-cli "${command}"
+    done <<< "${RCON_COMMANDS_AFTER_BACKUP}"
   else
     log ERROR "Unable to turn saving off. Is the server running?"
     exit 1
